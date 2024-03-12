@@ -6,7 +6,10 @@ from utils import factory
 from utils.data_manager import DataManager
 from utils.toolkit import count_parameters
 import os
+from foolbox.attacks import LinfPGD, FGSM, L2CarliniWagnerAttack
+from autoattack import AutoAttack
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def train(args):
@@ -18,6 +21,28 @@ def train(args):
         args["device"] = device
         _train(args)
 
+def plot_cnnCurve(cnncurve):
+    plt.plot(cnncurve['top1'])
+    plt.plot(cnncurve['top5'])
+    plt.title('CNN Accuracy')
+    plt.ylabel('Accuracy')
+    plt.xlabel('Task')
+    plt.legend(['Top1', 'Top5'], loc='upper left')
+    
+    #plt.legend(*scatter.legend_elements())
+        
+    plt.savefig("cnn_curve.png")
+    plt.close()
+
+def plot_advCurve(adv_curve):
+    for eps, acc in adv_curve:                
+        plt.plot(acc)
+    plt.legend(list(adv_curve.keys()), loc='upper left')
+    plt.title('Robust Accuracy')
+    plt.ylabel('Accuracy')
+    plt.xlabel('Task')
+    plt.savefig("adv_curve.png")
+    plt.close()
 
 def _train(args):
 
@@ -62,7 +87,7 @@ def _train(args):
     args["nb_tasks"] = data_manager.nb_tasks
     model = factory.get_model(args["model_name"], args)
 
-    cnn_curve, nme_curve = {"top1": [], "top5": []}, {"top1": [], "top5": []}
+    cnn_curve, nme_curve, adv_curve = {"top1": [], "top5": []}, {"top1": [], "top5": []} , {"top1": [], "top5": []}
     cnn_matrix, nme_matrix = [], []
 
     for task in range(data_manager.nb_tasks):
@@ -71,7 +96,8 @@ def _train(args):
             "Trainable params: {}".format(count_parameters(model._network, True))
         )
         model.incremental_train(data_manager)
-        cnn_accy, nme_accy = model.eval_task()
+        cnn_accy, nme_accy, adv_accy = model.eval_task(AutoAttack)
+        
         model.after_task()
 
         if nme_accy is not None:
@@ -88,6 +114,8 @@ def _train(args):
 
             cnn_curve["top1"].append(cnn_accy["top1"])
             cnn_curve["top5"].append(cnn_accy["top5"])
+            for eps, acc in adv_accy:                
+                adv_curve[eps].append(acc)
 
             nme_curve["top1"].append(nme_accy["top1"])
             nme_curve["top5"].append(nme_accy["top5"])
@@ -112,13 +140,20 @@ def _train(args):
 
             cnn_curve["top1"].append(cnn_accy["top1"])
             cnn_curve["top5"].append(cnn_accy["top5"])
+            for eps, acc in adv_accy:                
+                adv_curve[eps].append(acc)
 
             logging.info("CNN top1 curve: {}".format(cnn_curve["top1"]))
             logging.info("CNN top5 curve: {}\n".format(cnn_curve["top5"]))
+            logging.info("CNN robust accuracy curve: {}\n".format(cnn_curve["top5"]))
+            for eps, acc in adv_accy:
+                logging.info(f" Linf norm ≤ {eps:<6}: {acc.item() * 100:4.1f} %")
 
             print('Average Accuracy (CNN):', sum(cnn_curve["top1"])/len(cnn_curve["top1"]))
             logging.info("Average Accuracy (CNN): {} \n".format(sum(cnn_curve["top1"])/len(cnn_curve["top1"])))
-
+    
+    plot_advCurve(adv_curve)
+    plot_cnnCurve(cnn_curve)
     if len(cnn_matrix) > 0:
         np_acctable = np.zeros([task + 1, task + 1])
         for idxx, line in enumerate(cnn_matrix):

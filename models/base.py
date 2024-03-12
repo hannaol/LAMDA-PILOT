@@ -112,8 +112,8 @@ class BaseLearner(object):
 
         return ret
 
-    def eval_task(self):
-        y_pred, y_true = self._eval_cnn(self.test_loader)
+    def eval_task(self, attack, attack_epochs = 25):
+        y_pred, y_true, adv_accy = self._eval_cnn(self.test_loader, attack, attack_epochs)
         cnn_accy = self._evaluate(y_pred, y_true)
 
         if hasattr(self, "_class_means"):
@@ -122,7 +122,13 @@ class BaseLearner(object):
         else:
             nme_accy = None
 
-        return cnn_accy, nme_accy
+        return cnn_accy, nme_accy, adv_accy
+    
+    def get_acc(model, inputs, labels):
+        with torch.no_grad():
+            predictions = model(inputs).argmax(axis=-1)
+            accuracy = (predictions == labels).float().mean()
+            return accuracy.item()
 
     def incremental_train(self):
         pass
@@ -149,10 +155,14 @@ class BaseLearner(object):
 
         return np.around(tensor2numpy(correct) * 100 / total, decimals=2)
 
-    def _eval_cnn(self, loader):
+    def _eval_cnn(self, loader, attack, attack_epochs):
+        epsilons = [0.001, 0.003, 0.005, 0.008, 0.01, 0.1]
+        
+        robust_acc = [0.0] * len(epsilons)
+
         self._network.eval()
         y_pred, y_true = [], []
-        for _, (_, inputs, targets) in enumerate(loader):
+        for i, (_, inputs, targets) in enumerate(loader):
             inputs = inputs.to(self._device)
             with torch.no_grad():
                 outputs = self._network(inputs)["logits"]
@@ -164,7 +174,15 @@ class BaseLearner(object):
             y_pred.append(predicts.cpu().numpy())
             y_true.append(targets.cpu().numpy())
 
-        return np.concatenate(y_pred), np.concatenate(y_true)  # [N, topk]
+            if i < attack_epochs:
+                for j in range(len(epsilons)):
+                    adversary = attack(self._network, norm='Linf', eps=epsilons[j])
+                    x_adv = adversary.run_standard_evaluation(inputs, targets)
+                    adv_acc = self.get_acc(self._network, x_adv, targets)
+                    robust_acc[j] += adv_acc.cpu().numpy() / attack_epochs
+
+        res = {epsilons[i]: robust_acc[i] for i in range(len(epsilons))}
+        return np.concatenate(y_pred), np.concatenate(y_true), res  # [N, topk]
 
     def _eval_nme(self, loader, class_means):
         self._network.eval()
