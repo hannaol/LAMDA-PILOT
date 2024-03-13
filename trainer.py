@@ -7,7 +7,7 @@ from utils.data_manager import DataManager
 from utils.toolkit import count_parameters
 import os
 from foolbox.attacks import LinfPGD, FGSM, L2CarliniWagnerAttack
-from art.attacks.evasion import AutoAttack
+from autoattack import AutoAttack
 import numpy as np
 import matplotlib.pyplot as plt
 
