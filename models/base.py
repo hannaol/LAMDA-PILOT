@@ -6,6 +6,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from utils.toolkit import tensor2numpy, accuracy
 from scipy.spatial.distance import cdist
+import torch.nn as nn
 
 EPSILON = 1e-8
 batch_size = 64
@@ -156,7 +157,7 @@ class BaseLearner(object):
         return np.around(tensor2numpy(correct) * 100 / total, decimals=2)
 
     def _eval_cnn(self, loader, attack, attack_epochs):
-        epsilons = [0.001, 0.003, 0.005, 0.008, 0.01, 0.1]
+        epsilons = [0.01] #0.001, 0.003, 0.005, 0.008, , 0.1
         
         robust_acc = [0.0] * len(epsilons)
 
@@ -174,6 +175,7 @@ class BaseLearner(object):
             y_pred.append(predicts.cpu().numpy())
             y_true.append(targets.cpu().numpy())
 
+            targets = targets.to(self._device)
             if i < attack_epochs:
                 for j in range(len(epsilons)):
                     adversary = attack(self._network, norm='Linf', eps=epsilons[j])
