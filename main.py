@@ -1,6 +1,7 @@
 import json
 import argparse
 from trainer import train
+import os
 
 def main():
     args = setup_parser().parse_args()
@@ -22,4 +23,6 @@ def setup_parser():
     return parser
 
 if __name__ == '__main__':
+    os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"]=0
     main()
