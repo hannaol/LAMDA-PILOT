@@ -64,7 +64,10 @@ def _train(args):
 
     cnn_curve, nme_curve = {"top1": [], "top5": []}, {"top1": [], "top5": []}
     cnn_matrix, nme_matrix = [], []
-
+    path_saving = f'./checkpoints/{args["model_name"]}/'
+    if not os.path.exists(path_saving):
+        os.makedirs(path_saving)
+        
     for task in range(data_manager.nb_tasks):
         logging.info("All params: {}".format(count_parameters(model._network)))
         logging.info(
@@ -72,6 +75,8 @@ def _train(args):
         )
         model.incremental_train(data_manager)
         cnn_accy, nme_accy = model.eval_task()
+        
+        model.save_checkpoint(filename= path_saving + "task")
         model.after_task()
 
         if nme_accy is not None:
@@ -118,7 +123,8 @@ def _train(args):
 
             print('Average Accuracy (CNN):', sum(cnn_curve["top1"])/len(cnn_curve["top1"]))
             logging.info("Average Accuracy (CNN): {} \n".format(sum(cnn_curve["top1"])/len(cnn_curve["top1"])))
-
+    
+    save_dict_to_file(cnn_curve, path_saving, "cnnCurve")
     if len(cnn_matrix) > 0:
         np_acctable = np.zeros([task + 1, task + 1])
         for idxx, line in enumerate(cnn_matrix):
@@ -140,6 +146,20 @@ def _train(args):
         print(np_acctable)
         logging.info('Forgetting (NME): {}'.format(forgetting))
 
+def save_dict_to_file(dict, dir_path, filename):
+    import pickle
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+    with open(file = dir_path + filename, mode="wb") as f:
+        pickle.dump(dict,f)
+    
+def load_dict_from_file(file_path):
+    import pickle
+    if not os.path.exists(file_path):
+        return None
+    with open(file = file_path,mode="rb") as f:
+        loaded_dict = pickle.load(f)
+        return loaded_dict
 
 def _set_device(args):
     device_type = args["device"]
