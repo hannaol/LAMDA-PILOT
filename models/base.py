@@ -96,6 +96,7 @@ class BaseLearner(object):
             "model_state_dict": self._network.state_dict(),
         }
         torch.save(save_dict, "{}_{}.pkl".format(filename, self._cur_task))
+        self._network.to(self._device)
 
     def after_task(self):
         pass
